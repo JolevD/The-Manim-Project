@@ -1,0 +1,3 @@
+FROM manimcommunity/manim:latest
+WORKDIR /manim
+USER manim
