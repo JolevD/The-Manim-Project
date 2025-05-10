@@ -8,27 +8,21 @@ const PORT = 3000
 
 app.use(express.json())
 
-app.post('/generate', (req, res) => {
-    const { prompt } = req.body
+// 1. Generate a dynamic “template” blueprint
+app.post('/template', async (req, res) => {
+    const { prompt } = req.body;
+    if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
 
-    if (!prompt) {
-        return res.status(400).json({ error: 'Prompt is required' });
-    }
-
-    const sceneContent = `prompt: ${prompt}\n`;
-
-    const scenePath = path.join(__dirname, "scene.py")
-
-    fs.writeFile(scenePath, sceneContent, (err) => {
-        if (err) {
-            console.log('error while writing the scene.py')
-            return res.status(500).json({ error: 'Failed to write scene.py' });
-        }
-
-        res.json({ message: 'scene.py generated successfully' });
-    })
-
-})
+    const template = await anthropic.messages.create({
+        model: 'claude-3-7-sonnet-20250219',
+        max_tokens: 1024,
+        system: TEMPLATE_SYSTEM_PROMPT,      // system-level instructions
+        messages: [
+            { role: 'user', content: prompt }, // raw user prompt
+        ],
+    });
+    res.json({ template: template.choices?.[0]?.message?.content });
+});
 
 app.listen(PORT, () => {
     console.log('app is running on port 3000');
