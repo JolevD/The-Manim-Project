@@ -15,12 +15,14 @@ app.post('/template', async (req, res) => {
 
     const template = await anthropic.messages.create({
         model: 'claude-3-7-sonnet-20250219',
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: TEMPLATE_SYSTEM_PROMPT,      // system-level instructions
         messages: [
             { role: 'user', content: prompt }, // raw user prompt
         ],
     });
+
+    console.log(template)
     res.json({ template: template.choices?.[0]?.message?.content });
 });
 
