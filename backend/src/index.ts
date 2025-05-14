@@ -1,14 +1,19 @@
 require('dotenv').config()
-const express = require('express')
-const path = require('path')
-const fs = require('fs')
+ import express from 'express'
+ import path from 'path'
+ import fs from 'fs'
 const analysis = require('../templates/analysis-template.ts')
+import Anthropic from '@anthropic-ai/sdk';
+import { validateAnalysis } from './utils/ajvValidator'
+
 
 const app = express()
 
 const PORT = 3000
 
 app.use(express.json())
+
+const anthropic = new Anthropic();
 
 // 1. Generate a dynamic “template” blueprint
 app.post('/api/chat', async (req, res) => {
@@ -29,7 +34,7 @@ app.post('/api/chat', async (req, res) => {
 
     try {
         // 1. ANALYSIS PHASE
-        const analysisAi = await client.messages.create({
+        const analysisAi = await anthropic.messages.create({
             model: 'claude-3-7-sonnet-20250219',
             max_tokens: 2048,
             messages: [
@@ -49,7 +54,7 @@ app.post('/api/chat', async (req, res) => {
         }
 
         // 2. TEMPLATE PHASE
-        const templateAi = await client.messages.create({
+        const templateAi = await anthropic.messages.create({
             model: 'claude-3-7-sonnet-20250219',
             max_tokens: 2048,
             messages: [
@@ -69,7 +74,7 @@ app.post('/api/chat', async (req, res) => {
         }
 
         // 3. CODEGEN PHASE
-        const codeAi = await client.messages.create({
+        const codeAi = await anthropic.messages.create({
             model: 'claude-3-7-sonnet-20250219',
             max_tokens: 2048,
             messages: [
