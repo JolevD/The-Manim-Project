@@ -1,35 +1,37 @@
-require('dotenv').config()
- import express from 'express'
- import path from 'path'
- import fs from 'fs'
-const analysis = require('../templates/analysis-template.ts')
-import Anthropic from '@anthropic-ai/sdk';
-import { validateAnalysis } from './utils/ajvValidator'
+require("dotenv").config();
 
+import express from "express";
+import Anthropic from "@anthropic-ai/sdk";
+import { getAnalysisSystemPrompt, ANALYSIS_UI_MESSAGES, RENDER_UI_MESSAGES } from "./templates/analysis-template";
+import { validateAnalysis } from "./utils/ajvValidator";
+import fs from "fs";
+import path from "path";
 
-const app = express()
-
-const PORT = 3000
-
-app.use(express.json())
+import cors from "cors";
+import { TextBlock } from "@anthropic-ai/sdk/resources/messages";
 
 const anthropic = new Anthropic();
+const app = express();
+app.use(cors())
+app.use(express.json())
 
-// 1. Generate a dynamic “template” blueprint
-app.post('/api/chat', async (req, res) => {
-    const { prompt } = req.body;
-    if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
 
-    // 1. Acknowledge immediately
+app.post("/api/chat", async (req, res) => {
+  const { prompt } = req.body;
+    if (!prompt) {
+         res.status(400).json({ error: "Prompt is required" });
+    }
+
+      // 1. Acknowledge immediately
     res.write(JSON.stringify({
         type: 'acknowledgment',
-        message: analysis.ANALYSIS_UI_MESSAGES.acknowledgment(prompt),
+        message: ANALYSIS_UI_MESSAGES.acknowledgment(prompt),
     }) + '\n');
 
     // 2. Tell client you’re processing the analysis
     res.write(JSON.stringify({
         type: 'status',
-        message: analysis.ANALYSIS_UI_MESSAGES.processing(),
+        message: ANALYSIS_UI_MESSAGES.processing(),
     }) + '\n');
 
     try {
@@ -37,52 +39,52 @@ app.post('/api/chat', async (req, res) => {
         const analysisAi = await anthropic.messages.create({
             model: 'claude-3-7-sonnet-20250219',
             max_tokens: 2048,
+            system: getAnalysisSystemPrompt(false),
             messages: [
-                { role: 'system', content: analysis.getAnalysisSystemPrompt(false) },
                 { role: 'user', content: prompt },
             ],
         });
-        const analysisText = analysisAi.choices[0].message.content;
+        const analysisText = (analysisAi.content[0] as TextBlock).text
         let analysisJson;
         try {
             analysisJson = JSON.parse(analysisText);
         } catch {
-            return res.status(422).json({ error: 'Invalid JSON from analysis phase' });
+             res.status(422).json({ error: 'Invalid JSON from analysis phase' });
         }
         if (!validateAnalysis(analysisJson)) {
-            return res.status(422).json({ error: 'Analysis schema error', details: validateAnalysis.errors });
+             res.status(422).json({ error: 'Analysis schema error', details: validateAnalysis.errors });
         }
 
         // 2. TEMPLATE PHASE
         const templateAi = await anthropic.messages.create({
             model: 'claude-3-7-sonnet-20250219',
             max_tokens: 2048,
+            system: TEMPLATE_SYSTEM_PROMPT,
             messages: [
-                { role: 'system', content: TEMPLATE_SYSTEM_PROMPT },
                 { role: 'user', content: JSON.stringify(analysisJson) },
             ],
         });
-        const templateText = templateAi.choices[0].message.content;
+        const templateText = (templateAi.content[0] as TextBlock).text
         let templateJson;
         try {
             templateJson = JSON.parse(templateText);
         } catch {
-            return res.status(422).json({ error: 'Invalid JSON from template phase' });
+             res.status(422).json({ error: 'Invalid JSON from template phase' });
         }
         if (!validateTemplate(templateJson)) {
-            return res.status(422).json({ error: 'Template schema error', details: validateTemplate.errors });
+             res.status(422).json({ error: 'Template schema error', details: validateTemplate.errors });
         }
 
         // 3. CODEGEN PHASE
         const codeAi = await anthropic.messages.create({
             model: 'claude-3-7-sonnet-20250219',
             max_tokens: 2048,
+            system: CODEGEN_SYSTEM_PROMPT,
             messages: [
-                { role: 'system', content: CODEGEN_SYSTEM_PROMPT },
                 { role: 'user', content: JSON.stringify(templateJson) },
             ],
         });
-        const codeText = codeAi.choices[0].message.content;
+        const codeText = (codeAi.content[0] as TextBlock).text
 
         res.write(JSON.stringify({
             type: 'code',
@@ -98,15 +100,17 @@ app.post('/api/chat', async (req, res) => {
             type: 'status',
             message: RENDER_UI_MESSAGES.rendering(),
         }) + '\n');
+        res.end();
         // pass the gen_codeResponse to docker 
         // console.log(analysis)
         // res.json({ analysis: analysis.choices?.[0]?.message?.content });
     }
     catch (error) {
-        console.log(error)
+       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.write(JSON.stringify({ 
+        type: 'error',
+        message: errorMessage 
+    }) + '\n');
+        res.end();
     }
-});
-
-app.listen(PORT, () => {
-    console.log('app is running on port 3000');
 })
