@@ -9,6 +9,7 @@ import path from "path";
 
 import cors from "cors";
 import { TextBlock } from "@anthropic-ai/sdk/resources/messages";
+import { getTemplateSystemPrompt, SYSTEM_TEMPLATE_PROMPT } from "./templates/manim-template";
 
 const anthropic = new Anthropic();
 const app = express();
@@ -59,7 +60,7 @@ app.post("/api/chat", async (req, res) => {
         const templateAi = await anthropic.messages.create({
             model: 'claude-3-7-sonnet-20250219',
             max_tokens: 2048,
-            system: TEMPLATE_SYSTEM_PROMPT,
+            system: getTemplateSystemPrompt(false),
             messages: [
                 { role: 'user', content: JSON.stringify(analysisJson) },
             ],
